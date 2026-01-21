@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import { buildWsUrl } from '@/lib/api';
 
 export interface TerminalInstance {
   terminal: Terminal;
@@ -326,9 +327,16 @@ export function TerminalProvider({ children }: TerminalProviderProps) {
       // Store callbacks in ref so they can be updated without recreating connection
       connectionCallbacksRef.current.set(tabId, { onData, onExit });
 
-      // Create new WebSocket
-      const wsEndpoint = endpoint.replace(/^http/, 'ws');
-      const ws = new WebSocket(wsEndpoint);
+      // Create new WebSocket using the buildWsUrl helper
+      // Note: endpoint is expected to be a path like /api/terminal/ws?...
+      // We need to extract just the path part if it's a full URL
+      let wsPath = endpoint;
+      if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+        // Extract path from full URL
+        const url = new URL(endpoint);
+        wsPath = url.pathname + url.search;
+      }
+      const ws = new WebSocket(buildWsUrl(wsPath));
 
       ws.onmessage = (event) => {
         try {

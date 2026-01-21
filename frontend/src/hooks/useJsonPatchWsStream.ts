@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { produce } from 'immer';
 import { applyPatch } from 'rfc6902';
 import type { Operation } from 'rfc6902';
+import { buildWsUrl } from '@/lib/api';
 
 type WsJsonPatchMsg = { JsonPatch: Operation[] };
 type WsReadyMsg = { Ready: true };
@@ -96,9 +97,8 @@ export const useJsonPatchWsStream = <T extends object>(
       // Reset finished flag for new connection
       finishedRef.current = false;
 
-      // Convert HTTP endpoint to WebSocket endpoint
-      const wsEndpoint = endpoint.replace(/^http/, 'ws');
-      const ws = new WebSocket(wsEndpoint);
+      // Build WebSocket URL with API base path
+      const ws = new WebSocket(buildWsUrl(endpoint));
 
       ws.onopen = () => {
         setError(null);

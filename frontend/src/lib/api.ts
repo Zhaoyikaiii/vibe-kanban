@@ -109,13 +109,39 @@ export class ApiError<E = unknown> extends Error {
   }
 }
 
+// API base URL - uses VITE_API_BASE or defaults to empty (relative path)
+// This should be set to '/vibe' when deployed behind a reverse proxy at /vibe/
+export const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+/**
+ * Build a full API URL with the base path
+ * For WebSocket connections, use buildWsUrl instead
+ */
+export const buildApiUrl = (path: string): string => {
+  return path.startsWith('/api') ? `${API_BASE}${path}` : path;
+};
+
+/**
+ * Build a WebSocket URL with the base path
+ * Handles protocol conversion (http->ws, https->wss) and base path
+ */
+export const buildWsUrl = (path: string): string => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  const fullPath = path.startsWith('/api') ? `${API_BASE}${path}` : path;
+  return `${protocol}//${host}${fullPath}`;
+};
+
 const makeRequest = async (url: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers ?? {});
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(url, {
+  // Prepend API_BASE to URLs starting with /api
+  const finalUrl = url.startsWith('/api') ? `${API_BASE}${url}` : url;
+
+  return fetch(finalUrl, {
     ...options,
     headers,
   });
@@ -1009,7 +1035,7 @@ export const imagesApi = {
     const formData = new FormData();
     formData.append('image', file);
 
-    const response = await fetch('/api/images/upload', {
+    const response = await fetch(buildApiUrl('/api/images/upload'), {
       method: 'POST',
       body: formData,
       credentials: 'include',
@@ -1031,7 +1057,7 @@ export const imagesApi = {
     const formData = new FormData();
     formData.append('image', file);
 
-    const response = await fetch(`/api/images/task/${taskId}/upload`, {
+    const response = await fetch(buildApiUrl(`/api/images/task/${taskId}/upload`), {
       method: 'POST',
       body: formData,
       credentials: 'include',
@@ -1061,7 +1087,7 @@ export const imagesApi = {
     formData.append('image', file);
 
     const response = await fetch(
-      `/api/task-attempts/${attemptId}/images/upload`,
+      buildApiUrl(`/api/task-attempts/${attemptId}/images/upload`),
       {
         method: 'POST',
         body: formData,
@@ -1094,7 +1120,7 @@ export const imagesApi = {
   },
 
   getImageUrl: (imageId: string): string => {
-    return `/api/images/${imageId}/file`;
+    return buildApiUrl(`/api/images/${imageId}/file`);
   },
 };
 

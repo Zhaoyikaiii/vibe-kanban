@@ -25,6 +25,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { SearchProvider } from '@/contexts/SearchContext';
 
 import { HotkeysProvider } from 'react-hotkeys-hook';
+import NiceModal from '@ebay/nice-modal-react';
 
 import { ProjectProvider } from '@/contexts/ProjectContext';
 import { ThemeMode } from 'shared/types';
@@ -45,7 +46,12 @@ import { Workspaces } from '@/pages/ui-new/Workspaces';
 import { WorkspacesLanding } from '@/pages/ui-new/WorkspacesLanding';
 import { ElectricTestPage } from '@/pages/ui-new/ElectricTestPage';
 
+import { API_BASE } from '@/lib/api';
+
 const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
+
+// Router basename - matches the VITE_API_BASE for subpath deployment
+const ROUTER_BASENAME = API_BASE || undefined;
 
 function AppContent() {
   const { config, analyticsUserId, updateAndSaveConfig } = useUserSystem();
@@ -206,15 +212,17 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={ROUTER_BASENAME}>
       <UserSystemProvider>
-        <ClickedElementsProvider>
-          <ProjectProvider>
-            <HotkeysProvider initiallyActiveScopes={['*', 'global', 'kanban']}>
-              <AppContent />
-            </HotkeysProvider>
-          </ProjectProvider>
-        </ClickedElementsProvider>
+        <NiceModal.Provider>
+          <ClickedElementsProvider>
+            <ProjectProvider>
+              <HotkeysProvider initiallyActiveScopes={['*', 'global', 'kanban']}>
+                <AppContent />
+              </HotkeysProvider>
+            </ProjectProvider>
+          </ClickedElementsProvider>
+        </NiceModal.Provider>
       </UserSystemProvider>
     </BrowserRouter>
   );
