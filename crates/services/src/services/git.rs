@@ -68,6 +68,22 @@ pub enum MergeStrategy {
     FastForward,
 }
 
+/// Status of a repository's working directory
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RepoWorkingStatus {
+    /// Current branch name
+    pub current_branch: String,
+    /// Number of files with uncommitted changes (staged or unstaged)
+    pub uncommitted_files: usize,
+    /// Number of untracked files
+    pub untracked_files: usize,
+    /// Whether there are staged changes ready to commit
+    pub has_staged_changes: bool,
+    /// List of changed file paths (limited to first 50)
+    pub changed_files: Vec<String>,
+}
+
 #[derive(Debug, Serialize, TS)]
 pub struct GitBranch {
     pub name: String,
@@ -1161,6 +1177,79 @@ impl GitService {
             .get_worktree_status(worktree_path)
             .map_err(|e| GitServiceError::InvalidRepository(format!("git status failed: {e}")))?;
         Ok((st.uncommitted_tracked, st.untracked))
+    }
+
+    /// Get detailed working directory status for a repository
+    pub fn get_repo_working_status(
+        &self,
+        repo_path: &Path,
+    ) -> Result<RepoWorkingStatus, GitServiceError> {
+        let git = GitCli::new();
+
+        // Get current branch
+        let current_branch = self
+            .get_current_branch(repo_path)
+            .unwrap_or_else(|_| "unknown".to_string());
+
+        // Get worktree status
+        let status = git
+            .get_worktree_status(repo_path)
+            .map_err(|e| GitServiceError::InvalidRepository(format!("git status failed: {e}")))?;
+
+        // Check for staged changes
+        let has_staged = git.has_staged_changes(repo_path).unwrap_or(false);
+
+        // Convert entries to file paths (limit to 50)
+        let changed_files: Vec<String> = status
+            .entries
+            .iter()
+            .take(50)
+            .filter_map(|e| String::from_utf8(e.path.clone()).ok())
+            .collect();
+
+        Ok(RepoWorkingStatus {
+            current_branch,
+            uncommitted_files: status.uncommitted_tracked,
+            untracked_files: status.untracked,
+            has_staged_changes: has_staged,
+            changed_files,
+        })
+    }
+
+    /// Commit all changes in a repository with the given message.
+    /// Returns the new commit SHA on success.
+    pub fn commit_all_changes(
+        &self,
+        repo_path: &Path,
+        message: &str,
+    ) -> Result<String, GitServiceError> {
+        let git = GitCli::new();
+
+        // Check if there are changes to commit
+        let has_changes = git
+            .has_changes(repo_path)
+            .map_err(|e| GitServiceError::InvalidRepository(format!("git status failed: {e}")))?;
+
+        if !has_changes {
+            return Err(GitServiceError::InvalidRepository(
+                "No changes to commit".to_string(),
+            ));
+        }
+
+        // Stage all changes
+        git.add_all(repo_path)
+            .map_err(|e| GitServiceError::InvalidRepository(format!("git add failed: {e}")))?;
+
+        // Ensure identity
+        self.ensure_cli_commit_identity(repo_path)?;
+
+        // Commit
+        git.commit(repo_path, message)
+            .map_err(|e| GitServiceError::InvalidRepository(format!("git commit failed: {e}")))?;
+
+        // Return the new commit SHA
+        let head = self.get_head_info(repo_path)?;
+        Ok(head.oid)
     }
 
     /// Evaluate whether any action is needed to reset to `target_commit_oid` and

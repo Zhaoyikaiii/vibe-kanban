@@ -392,6 +392,32 @@ export type GitBranch = { name: string, is_current: boolean, is_remote: boolean,
 
 export type MergeStrategy = "squash" | "fast_forward";
 
+export type RepoWorkingStatus = { 
+/**
+ * Current branch name
+ */
+current_branch: string, 
+/**
+ * Number of files with uncommitted changes (staged or unstaged)
+ */
+uncommitted_files: number, 
+/**
+ * Number of untracked files
+ */
+untracked_files: number, 
+/**
+ * Whether there are staged changes ready to commit
+ */
+has_staged_changes: boolean, 
+/**
+ * List of changed file paths (limited to first 50)
+ */
+changed_files: Array<string>, };
+
+export type CommitRepoRequest = { message: string, };
+
+export type CommitRepoResponse = { commit_sha: string, };
+
 export type QueuedMessage = { 
 /**
  * The session this message is queued for
