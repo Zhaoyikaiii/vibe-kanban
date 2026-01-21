@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { AlertCircle } from 'lucide-react';
 import { useLogStream } from '@/hooks/useLogStream';
 import RawLogText from '@/components/common/RawLogText';
@@ -18,23 +18,44 @@ export function ProcessLogsViewerContent({
   logs: LogEntry[];
   error: string | null;
 }) {
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
   const didInitScroll = useRef(false);
   const prevLenRef = useRef(0);
   const [atBottom, setAtBottom] = useState(true);
+
+  const virtualizer = useVirtualizer({
+    count: logs.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 32,
+    overscan: 20,
+    getItemKey: (index) => `log-${index}`,
+  });
+
+  const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
+    if (parentRef.current) {
+      parentRef.current.scrollTo({
+        top: parentRef.current.scrollHeight,
+        behavior,
+      });
+    }
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (!parentRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = parentRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAtBottom(isAtBottom);
+  }, []);
 
   // 1) Initial jump to bottom once data appears.
   useEffect(() => {
     if (!didInitScroll.current && logs.length > 0) {
       didInitScroll.current = true;
       requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({
-          index: logs.length - 1,
-          align: 'end',
-        });
+        scrollToBottom('auto');
       });
     }
-  }, [logs.length]);
+  }, [logs.length, scrollToBottom]);
 
   // 2) If there's a large append and we're at bottom, force-stick to the last item.
   useEffect(() => {
@@ -45,26 +66,14 @@ export function ProcessLogsViewerContent({
     // tweak threshold as you like; this handles "big bursts"
     const LARGE_BURST = 10;
     if (grewBy >= LARGE_BURST && atBottom && logs.length > 0) {
-      // defer so Virtuoso can re-measure before jumping
+      // defer so virtualizer can re-measure before jumping
       requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({
-          index: logs.length - 1,
-          align: 'end',
-        });
+        scrollToBottom('smooth');
       });
     }
-  }, [logs.length, atBottom, logs]);
+  }, [logs.length, atBottom, scrollToBottom]);
 
-  const formatLogLine = (entry: LogEntry, index: number) => {
-    return (
-      <RawLogText
-        key={index}
-        content={entry.content}
-        channel={entry.type === 'STDERR' ? 'stderr' : 'stdout'}
-        className="text-sm px-4 py-1"
-      />
-    );
-  };
+  const virtualItems = virtualizer.getVirtualItems();
 
   return (
     <div className="h-full">
@@ -78,19 +87,43 @@ export function ProcessLogsViewerContent({
           {error}
         </div>
       ) : (
-        <Virtuoso<LogEntry>
-          ref={virtuosoRef}
-          className="flex-1 rounded-lg"
-          data={logs}
-          itemContent={(index, entry) =>
-            formatLogLine(entry as LogEntry, index)
-          }
-          // Keep pinned while user is at bottom; release when they scroll up
-          atBottomStateChange={setAtBottom}
-          followOutput={atBottom ? 'smooth' : false}
-          // Optional: a bit more overscan helps during bursts
-          increaseViewportBy={{ top: 0, bottom: 600 }}
-        />
+        <div
+          ref={parentRef}
+          className="h-full overflow-auto rounded-lg"
+          onScroll={handleScroll}
+        >
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const entry = logs[virtualItem.index];
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  <RawLogText
+                    content={entry.content}
+                    channel={entry.type === 'STDERR' ? 'stderr' : 'stdout'}
+                    className="text-sm px-4 py-1"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

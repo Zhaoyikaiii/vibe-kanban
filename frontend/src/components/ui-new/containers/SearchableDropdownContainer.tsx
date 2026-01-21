@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { VirtuosoHandle } from 'react-virtuoso';
-import { SearchableDropdown } from '@/components/ui-new/primitives/SearchableDropdown';
+import { SearchableDropdown, VirtualListHandle } from '@/components/ui-new/primitives/SearchableDropdown';
 
 interface SearchableDropdownContainerProps<T> {
   /** Array of items to display */
@@ -48,7 +47,7 @@ export function SearchableDropdownContainer<T>({
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const virtualListRef = useRef<VirtualListHandle>(null);
 
   const filteredItems = useMemo(() => {
     if (!searchTerm.trim()) return items;
@@ -80,7 +79,7 @@ export function SearchableDropdownContainer<T>({
       const next =
         (start + delta + filteredItems.length) % filteredItems.length;
       setHighlightedIndex(next);
-      virtuosoRef.current?.scrollIntoView({ index: next, behavior: 'auto' });
+      virtualListRef.current?.scrollToIndex(next, 'auto');
     },
     [filteredItems, safeHighlightedIndex]
   );
@@ -156,7 +155,7 @@ export function SearchableDropdownContainer<T>({
       open={dropdownOpen}
       onOpenChange={handleOpenChange}
       onKeyDown={handleKeyDown}
-      virtuosoRef={virtuosoRef}
+      virtualListRef={virtualListRef}
       contentClassName={contentClassName}
       placeholder={placeholder}
       emptyMessage={emptyMessage}
