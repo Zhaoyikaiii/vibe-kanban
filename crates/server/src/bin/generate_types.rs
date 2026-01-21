@@ -160,6 +160,7 @@ fn generate_types_content() -> String {
         services::services::config::ShowcaseState::decl(),
         services::services::config::SendMessageShortcut::decl(),
         services::services::git::GitBranch::decl(),
+        services::services::git::MergeStrategy::decl(),
         services::services::queued_message::QueuedMessage::decl(),
         services::services::queued_message::QueueStatus::decl(),
         services::services::git::ConflictOp::decl(),
