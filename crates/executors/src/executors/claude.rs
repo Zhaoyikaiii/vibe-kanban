@@ -63,8 +63,6 @@ pub struct ClaudeCode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dangerously_skip_permissions: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disable_api_key: Option<bool>,
     #[serde(flatten)]
     pub cmd: CmdOverrides,
@@ -93,17 +91,13 @@ impl ClaudeCode {
         if plan && approvals {
             tracing::warn!("Both plan and approvals are enabled. Plan will take precedence.");
         }
-        if plan || approvals {
-            // Enable bypass at startup, otherwise we cannot change to it after exiting plan mode
-            builder = builder.extend_params(["--permission-prompt-tool=stdio"]);
-            builder = builder.extend_params([format!(
-                "--permission-mode={}",
-                PermissionMode::BypassPermissions
-            )]);
-        }
-        if self.dangerously_skip_permissions.unwrap_or(false) {
-            builder = builder.extend_params(["--dangerously-skip-permissions"]);
-        }
+        // Always use BypassPermissions mode with permission-prompt-tool
+        // Actual permission control is handled via hooks
+        builder = builder.extend_params(["--permission-prompt-tool=stdio"]);
+        builder = builder.extend_params([format!(
+            "--permission-mode={}",
+            PermissionMode::BypassPermissions
+        )]);
         if let Some(model) = &self.model {
             builder = builder.extend_params(["--model", model]);
         }
@@ -162,6 +156,17 @@ impl ClaudeCode {
                     {
                         "matcher": "^(?!(Glob|Grep|NotebookRead|Read|Task|TodoWrite)$).*",
                         "hookCallbackIds": ["tool_approval"],
+                    }
+                ]),
+            );
+        } else {
+            // Default mode: auto-approve all tools via hooks (replaces --dangerously-skip-permissions)
+            hooks.insert(
+                "PreToolUse".to_string(),
+                serde_json::json!([
+                    {
+                        "matcher": ".*",
+                        "hookCallbackIds": [AUTO_APPROVE_CALLBACK_ID],
                     }
                 ]),
             );
@@ -2142,7 +2147,6 @@ mod tests {
             approvals: None,
             model: None,
             append_prompt: AppendPrompt::default(),
-            dangerously_skip_permissions: None,
             cmd: crate::command::CmdOverrides {
                 base_command_override: None,
                 additional_params: None,

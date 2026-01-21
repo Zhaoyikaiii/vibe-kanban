@@ -3,7 +3,6 @@
     "CLAUDE_CODE": {
       "DEFAULT": {
         "CLAUDE_CODE": {
-          "dangerously_skip_permissions": true
         }
       },
       "PLAN": {
@@ -25,7 +24,6 @@
     "CODE_BUDDY": {
       "DEFAULT": {
         "CODE_BUDDY": {
-          "dangerously_skip_permissions": true
         }
       },
       "PLAN": {
