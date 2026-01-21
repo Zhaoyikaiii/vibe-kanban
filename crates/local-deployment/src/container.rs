@@ -1083,7 +1083,7 @@ impl ContainerService for LocalContainerService {
             .ok_or(ContainerError::Other(anyhow!(
                 "Container ref not found for workspace"
             )))?;
-        let current_dir = PathBuf::from(container_ref);
+        let workspace_dir = PathBuf::from(container_ref);
 
         let approvals_service: Arc<dyn ExecutorApprovalService> =
             match executor_action.base_executor() {
@@ -1104,7 +1104,36 @@ impl ContainerService for LocalContainerService {
 
         let repos = WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await?;
         let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
-        let repo_context = RepoContext::new(current_dir.clone(), repo_names);
+
+        // Verify git worktrees are ready for single-repo workspaces
+        if repos.len() == 1 {
+            let repo_dir = workspace_dir.join(&repos[0].name);
+            
+            // Check if the directory exists
+            if !repo_dir.exists() {
+                return Err(ContainerError::Other(anyhow!(
+                    "Git worktree not ready at '{}'. The worktree may not have been created successfully. \
+                    Please try creating a new task or check if the repository '{}' is accessible.",
+                    repo_dir.display(),
+                    repos[0].path.display()
+                )));
+            }
+            
+            // Verify it's a valid git worktree (has .git file)
+            let git_file = repo_dir.join(".git");
+            if !git_file.exists() {
+                return Err(ContainerError::Other(anyhow!(
+                    "Directory '{}' exists but is not a valid git worktree (missing .git file). \
+                    The worktree creation may have failed. Please delete this task and create a new one.",
+                    repo_dir.display()
+                )));
+            }
+        }
+
+        // Use workspace_dir as current_dir; working_dir in ExecutorAction handles subdirectory
+        let current_dir = workspace_dir.clone();
+
+        let repo_context = RepoContext::new(workspace_dir, repo_names);
 
         let commit_reminder = self.config.read().await.commit_reminder;
         let mut env = ExecutionEnv::new(repo_context, commit_reminder);
@@ -1127,6 +1156,12 @@ impl ContainerService for LocalContainerService {
         env.insert("VK_WORKSPACE_ID", workspace.id.to_string());
         env.insert("VK_WORKSPACE_BRANCH", &workspace.branch);
 
+        tracing::info!(
+            "Starting executor in directory: {} (exists: {})",
+            current_dir.display(),
+            current_dir.exists()
+        );
+
         // Create the child and stream, add to execution tracker with timeout
         let mut spawned = tokio::time::timeout(
             Duration::from_secs(30),
@@ -1137,6 +1172,9 @@ impl ContainerService for LocalContainerService {
             ContainerError::Other(anyhow!(
                 "Timeout: process took more than 30 seconds to start"
             ))
+        }).map_err(|e| {
+            tracing::error!("Spawn error for directory {}: {}", current_dir.display(), e);
+            e
         })??;
 
         self.track_child_msgs_in_store(execution_process.id, &mut spawned.child)
