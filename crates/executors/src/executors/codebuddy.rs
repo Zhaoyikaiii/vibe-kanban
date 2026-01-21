@@ -31,6 +31,22 @@ use crate::{
 };
 
 fn base_command() -> &'static str {
+    // Try common installation paths for codebuddy
+    static PATHS: &[&str] = &[
+        "/root/.local/bin/codebuddy",
+        "/usr/local/bin/codebuddy",
+        "/usr/bin/codebuddy",
+    ];
+    
+    for path in PATHS {
+        if std::path::Path::new(path).exists() {
+            tracing::info!("Found codebuddy at: {}", path);
+            return path;
+        }
+    }
+    
+    tracing::warn!("codebuddy not found in standard paths, falling back to PATH lookup");
+    // Fallback to just "codebuddy" and hope it's in PATH
     "codebuddy"
 }
 
@@ -234,6 +250,13 @@ impl CodeBuddy {
         let (program_path, args) = command_parts.into_resolved().await?;
         let combined_prompt = self.append_prompt.combine_prompt(prompt);
 
+        tracing::info!(
+            "CodeBuddy spawn: program={:?}, args={:?}, current_dir={:?}",
+            &program_path,
+            args,
+            current_dir
+        );
+
         let mut command = Command::new(program_path);
         command
             .kill_on_drop(true)
@@ -247,7 +270,10 @@ impl CodeBuddy {
             .with_profile(&self.cmd)
             .apply_to_command(&mut command);
 
-        let mut child = command.group_spawn()?;
+        let mut child = command.group_spawn().map_err(|e| {
+            tracing::error!("CodeBuddy group_spawn failed: {e}");
+            e
+        })?;
         let child_stdout = child.inner().stdout.take().ok_or_else(|| {
             ExecutorError::Io(std::io::Error::other("CodeBuddy missing stdout"))
         })?;
