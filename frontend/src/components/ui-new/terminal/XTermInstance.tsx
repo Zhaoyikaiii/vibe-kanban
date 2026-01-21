@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useTheme } from '@/components/ThemeProvider';
 import { getTerminalTheme } from '@/utils/terminalTheme';
 import { useTerminal } from '@/contexts/TerminalContext';
+import { API_BASE } from '@/lib/api';
 
 interface XTermInstanceProps {
   tabId: string;
@@ -41,7 +42,7 @@ export function XTermInstance({
   const endpoint = useMemo(() => {
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
     const host = window.location.host;
-    return `${protocol}//${host}/api/terminal/ws?workspace_id=${workspaceId}&cols=${initialSizeRef.current.cols}&rows=${initialSizeRef.current.rows}`;
+    return `${protocol}//${host}${API_BASE}/api/terminal/ws?workspace_id=${workspaceId}&cols=${initialSizeRef.current.cols}&rows=${initialSizeRef.current.rows}`;
   }, [workspaceId]);
 
   const fitTerminal = useCallback(() => {

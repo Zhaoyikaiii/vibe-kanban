@@ -67,7 +67,10 @@ export default defineConfig({
         ],
       },
     }),
-    sentryVitePlugin({ org: "bloop-ai", project: "vibe-kanban" }),
+    // Only enable Sentry plugin if auth token is provided
+    ...(process.env.SENTRY_AUTH_TOKEN
+      ? [sentryVitePlugin({ org: "bloop-ai", project: "vibe-kanban" })]
+      : []),
     executorSchemasPlugin(),
   ],
   resolve: {
@@ -96,5 +99,6 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ["wa-sqlite"],
   },
+  base: "/vibe/",
   build: { sourcemap: true },
 });
