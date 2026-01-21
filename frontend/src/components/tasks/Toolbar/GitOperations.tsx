@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ExternalLink,
+  GitCommit,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import {
@@ -26,10 +27,12 @@ import { ChangeTargetBranchDialog } from '@/components/dialogs/tasks/ChangeTarge
 import RepoSelector from '@/components/tasks/RepoSelector';
 import { RebaseDialog } from '@/components/dialogs/tasks/RebaseDialog';
 import { CreatePRDialog } from '@/components/dialogs/tasks/CreatePRDialog';
+import { CommitDialog } from '@/components/ui-new/dialogs/CommitDialog';
 import { useTranslation } from 'react-i18next';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 import { useGitOperations } from '@/hooks/useGitOperations';
 import { useRepoBranches } from '@/hooks';
+import { repoApi } from '@/lib/api';
 
 interface GitOperationsProps {
   selectedAttempt: Workspace;
@@ -65,8 +68,10 @@ function GitOperations({
   const [merging, setMerging] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [rebasing, setRebasing] = useState(false);
+  const [committing, setCommitting] = useState(false);
   const [mergeSuccess, setMergeSuccess] = useState(false);
   const [pushSuccess, setPushSuccess] = useState(false);
+  const [commitSuccess, setCommitSuccess] = useState(false);
 
   // Target branch change handlers
   const handleChangeTargetBranchClick = async (newBranch: string) => {
@@ -259,6 +264,43 @@ function GitOperations({
       targetBranch: getSelectedRepoStatus()?.target_branch_name,
     });
   };
+
+  const handleCommitClick = async () => {
+    const repoId = getSelectedRepoId();
+    if (!repoId) return;
+
+    try {
+      setCommitting(true);
+      const status = await repoApi.getStatus(repoId);
+
+      if (status.uncommitted_files === 0 && status.untracked_files === 0) {
+        // No changes to commit - could show a toast here
+        return;
+      }
+
+      const repo = repos.find((r) => r.id === repoId);
+      const result = await CommitDialog.show({
+        repoId,
+        repoName: repo?.display_name || repo?.name || 'Repository',
+        status,
+      });
+
+      if (result?.action === 'committed') {
+        setCommitSuccess(true);
+        setTimeout(() => setCommitSuccess(false), 2000);
+      }
+    } catch (error) {
+      // User cancelled or error - do nothing
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+  const commitButtonLabel = useMemo(() => {
+    if (commitSuccess) return t('git.states.committed', 'Committed');
+    if (committing) return t('git.states.committing', 'Committing...');
+    return t('git.states.commit', 'Commit');
+  }, [commitSuccess, committing, t]);
 
   const isVertical = layout === 'vertical';
 
@@ -528,6 +570,20 @@ function GitOperations({
                 className={`h-3.5 w-3.5 ${rebasing ? 'animate-spin' : ''}`}
               />
               <span className="truncate max-w-[10ch]">{rebaseButtonLabel}</span>
+            </Button>
+
+            <Button
+              onClick={handleCommitClick}
+              disabled={committing || isAttemptRunning || hasConflictsCalculated}
+              variant="outline"
+              size="xs"
+              className="border-primary text-primary hover:bg-primary gap-1 shrink-0"
+              aria-label={commitButtonLabel}
+            >
+              <GitCommit
+                className={`h-3.5 w-3.5 ${committing ? 'animate-pulse' : ''}`}
+              />
+              <span className="truncate max-w-[10ch]">{commitButtonLabel}</span>
             </Button>
           </div>
         ) : null}

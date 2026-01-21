@@ -8,6 +8,7 @@ import {
   CrosshairIcon,
   ArrowSquareOutIcon,
   GitMergeIcon,
+  GitCommitIcon,
   CheckCircleIcon,
   SpinnerGapIcon,
   WarningCircleIcon,
@@ -26,11 +27,13 @@ import { useRepoAction } from '@/stores/useUiPreferencesStore';
 export type RepoAction =
   | 'pull-request'
   | 'merge'
+  | 'commit'
   | 'change-target'
   | 'rebase'
   | 'push';
 
 const repoActionOptions: SplitButtonOption<RepoAction>[] = [
+  { value: 'commit', label: 'Commit', icon: GitCommitIcon },
   {
     value: 'pull-request',
     label: 'Open pull request',

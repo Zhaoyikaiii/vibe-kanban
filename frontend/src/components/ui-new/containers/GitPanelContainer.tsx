@@ -192,6 +192,7 @@ export function GitPanelContainer({
       const actionMap = {
         'pull-request': Actions.GitCreatePR,
         merge: Actions.GitMerge,
+        commit: Actions.GitCommit,
         rebase: Actions.GitRebase,
         'change-target': Actions.GitChangeTarget,
         push: Actions.GitPush,

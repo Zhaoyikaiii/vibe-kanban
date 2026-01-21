@@ -83,6 +83,9 @@ import {
   MergeTaskAttemptRequest,
   PushTaskAttemptRequest,
   RepoBranchStatus,
+  RepoWorkingStatus,
+  CommitRepoRequest,
+  CommitRepoResponse,
   AbortConflictsRequest,
   Session,
   Workspace,
@@ -909,6 +912,22 @@ export const repoApi = {
       options
     );
     return handleApiResponse<SearchResult[]>(response);
+  },
+
+  getStatus: async (repoId: string): Promise<RepoWorkingStatus> => {
+    const response = await makeRequest(`/api/repos/${repoId}/status`);
+    return handleApiResponse<RepoWorkingStatus>(response);
+  },
+
+  commit: async (
+    repoId: string,
+    data: CommitRepoRequest
+  ): Promise<CommitRepoResponse> => {
+    const response = await makeRequest(`/api/repos/${repoId}/commit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<CommitRepoResponse>(response);
   },
 };
 
