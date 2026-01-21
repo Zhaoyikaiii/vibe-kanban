@@ -220,7 +220,11 @@ export type ChangeTargetBranchRequest = { repo_id: string, new_target_branch: st
 
 export type ChangeTargetBranchResponse = { repo_id: string, new_target_branch: string, status: [number, number], };
 
-export type MergeTaskAttemptRequest = { repo_id: string, };
+export type MergeTaskAttemptRequest = { repo_id: string, 
+/**
+ * Merge strategy to use. Defaults to Squash if not specified.
+ */
+strategy: MergeStrategy, };
 
 export type PushTaskAttemptRequest = { repo_id: string, };
 
@@ -386,6 +390,34 @@ export type ShowcaseState = { seen_features: Array<string>, };
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 
+export type MergeStrategy = "squash" | "fast_forward";
+
+export type RepoWorkingStatus = { 
+/**
+ * Current branch name
+ */
+current_branch: string, 
+/**
+ * Number of files with uncommitted changes (staged or unstaged)
+ */
+uncommitted_files: number, 
+/**
+ * Number of untracked files
+ */
+untracked_files: number, 
+/**
+ * Whether there are staged changes ready to commit
+ */
+has_staged_changes: boolean, 
+/**
+ * List of changed file paths (limited to first 50)
+ */
+changed_files: Array<string>, };
+
+export type CommitRepoRequest = { message: string, };
+
+export type CommitRepoResponse = { commit_sha: string, };
+
 export type QueuedMessage = { 
 /**
  * The session this message is queued for
@@ -453,9 +485,9 @@ export type ExecutorConfigs = { executors: { [key in BaseCodingAgent]?: Executor
 
 export enum BaseAgentCapability { SESSION_FORK = "SESSION_FORK", SETUP_HELPER = "SETUP_HELPER" }
 
-export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
+export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
-export type CodeBuddy = { append_prompt: AppendPrompt, plan?: boolean | null, approvals?: boolean | null, dangerously_skip_permissions?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
+export type CodeBuddy = { append_prompt: AppendPrompt, plan?: boolean | null, approvals?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type Gemini = { append_prompt: AppendPrompt, model?: string | null, yolo?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 

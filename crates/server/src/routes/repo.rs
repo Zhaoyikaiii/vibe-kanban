@@ -10,8 +10,8 @@ use db::models::{
     repo::{Repo, UpdateRepo},
 };
 use deployment::Deployment;
-use serde::Deserialize;
-use services::services::{file_search::SearchQuery, git::GitBranch};
+use serde::{Deserialize, Serialize};
+use services::services::{file_search::SearchQuery, git::{GitBranch, RepoWorkingStatus}};
 use ts_rs::TS;
 use utils::response::ApiResponse;
 use uuid::Uuid;
@@ -206,6 +206,52 @@ pub async fn search_repo(
     }
 }
 
+/// Request to commit changes in a repository
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub struct CommitRepoRequest {
+    pub message: String,
+}
+
+/// Response from committing changes
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct CommitRepoResponse {
+    pub commit_sha: String,
+}
+
+pub async fn get_repo_status(
+    State(deployment): State<DeploymentImpl>,
+    Path(repo_id): Path<Uuid>,
+) -> Result<ResponseJson<ApiResponse<RepoWorkingStatus>>, ApiError> {
+    let repo = deployment
+        .repo()
+        .get_by_id(&deployment.db().pool, repo_id)
+        .await?;
+
+    let status = deployment.git().get_repo_working_status(&repo.path)?;
+    Ok(ResponseJson(ApiResponse::success(status)))
+}
+
+pub async fn commit_repo_changes(
+    State(deployment): State<DeploymentImpl>,
+    Path(repo_id): Path<Uuid>,
+    ResponseJson(payload): ResponseJson<CommitRepoRequest>,
+) -> Result<ResponseJson<ApiResponse<CommitRepoResponse>>, ApiError> {
+    let repo = deployment
+        .repo()
+        .get_by_id(&deployment.db().pool, repo_id)
+        .await?;
+
+    let commit_sha = deployment
+        .git()
+        .commit_all_changes(&repo.path, &payload.message)?;
+
+    Ok(ResponseJson(ApiResponse::success(CommitRepoResponse {
+        commit_sha,
+    })))
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/repos", get(get_repos).post(register_repo))
@@ -213,6 +259,8 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/repos/batch", post(get_repos_batch))
         .route("/repos/{repo_id}", get(get_repo).put(update_repo))
         .route("/repos/{repo_id}/branches", get(get_repo_branches))
+        .route("/repos/{repo_id}/status", get(get_repo_status))
+        .route("/repos/{repo_id}/commit", post(commit_repo_changes))
         .route("/repos/{repo_id}/search", get(search_repo))
         .route("/repos/{repo_id}/open-editor", post(open_repo_in_editor))
 }

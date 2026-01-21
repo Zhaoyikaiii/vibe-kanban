@@ -27,6 +27,7 @@ import {
   SpinnerIcon,
   GitPullRequestIcon,
   GitMergeIcon,
+  GitCommitIcon,
   ArrowsClockwiseIcon,
   CrosshairIcon,
   DesktopIcon,
@@ -52,6 +53,7 @@ import { ChangeTargetDialog } from '@/components/ui-new/dialogs/ChangeTargetDial
 import { RebaseDialog } from '@/components/ui-new/dialogs/RebaseDialog';
 import { ResolveConflictsDialog } from '@/components/ui-new/dialogs/ResolveConflictsDialog';
 import { RenameWorkspaceDialog } from '@/components/ui-new/dialogs/RenameWorkspaceDialog';
+import { CommitDialog } from '@/components/ui-new/dialogs/CommitDialog';
 import { CreatePRDialog } from '@/components/dialogs/tasks/CreatePRDialog';
 import { getIdeName } from '@/components/ide/IdeIcon';
 import { EditorSelectionDialog } from '@/components/dialogs/tasks/EditorSelectionDialog';
@@ -826,7 +828,7 @@ export const Actions = {
       });
 
       if (confirmResult === 'confirmed') {
-        await attemptsApi.merge(workspaceId, { repo_id: repoId });
+        await attemptsApi.merge(workspaceId, { repo_id: repoId, strategy: 'squash' });
         invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
       }
     },
@@ -915,6 +917,75 @@ export const Actions = {
         throw new Error('Failed to push changes');
       }
       invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
+    },
+  },
+
+  // Navbar-specific commit action that auto-selects the first repo
+  NavbarCommit: {
+    id: 'navbar-commit',
+    label: 'Commit',
+    icon: GitCommitIcon,
+    requiresTarget: true,
+    isVisible: (ctx) => ctx.hasWorkspace && ctx.hasGitRepos,
+    execute: async (ctx, workspaceId) => {
+      // Get repos for this workspace
+      const repos = await attemptsApi.getRepos(workspaceId);
+      if (!repos || repos.length === 0) {
+        throw new Error('No repositories found');
+      }
+
+      // Use the first repo
+      const repoId = repos[0].id;
+      const repo = await repoApi.getById(repoId);
+      const status = await repoApi.getStatus(repoId);
+
+      // Check if there are changes to commit
+      if (status.uncommitted_files === 0 && status.untracked_files === 0) {
+        throw new Error('No changes to commit');
+      }
+
+      const result = await CommitDialog.show({
+        repoId,
+        repoName: repo.display_name || repo.path.split('/').pop() || 'Repository',
+        status,
+      });
+
+      if (result.action === 'committed') {
+        invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
+      }
+    },
+  },
+
+  GitCommit: {
+    id: 'git-commit',
+    label: 'Commit Changes',
+    icon: GitCommitIcon,
+    requiresTarget: 'git',
+    isVisible: (ctx) => ctx.hasWorkspace && ctx.hasGitRepos,
+    execute: async (ctx, workspaceId, repoId) => {
+      // Get repo info and status
+      const repo = await repoApi.getById(repoId);
+      const status = await repoApi.getStatus(repoId);
+
+      // Check if there are changes to commit
+      if (status.uncommitted_files === 0 && status.untracked_files === 0) {
+        throw new Error('No changes to commit');
+      }
+
+      const result = await CommitDialog.show({
+        repoId,
+        repoName: repo.display_name || repo.path.split('/').pop() || 'Repository',
+        status,
+        // TODO: Add AI-powered commit message generation
+        // onGenerateMessage: async () => {
+        //   // Call AI to generate commit message based on diff
+        //   return 'feat: generated commit message';
+        // },
+      });
+
+      if (result.action === 'committed') {
+        invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
+      }
     },
   },
 
@@ -1031,7 +1102,7 @@ export type NavbarItem = ActionDefinition | typeof NavbarDivider;
 
 // Navbar action groups define which actions appear in each section
 export const NavbarActionGroups = {
-  left: [Actions.ArchiveWorkspace, Actions.OpenInOldUI] as ActionDefinition[],
+  left: [Actions.NavbarCommit, Actions.ArchiveWorkspace, Actions.OpenInOldUI] as ActionDefinition[],
   right: [
     Actions.ToggleDiffViewMode,
     Actions.ToggleAllDiffs,
