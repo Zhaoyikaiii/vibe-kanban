@@ -395,10 +395,4 @@
   }
 }
 
-/* Hide Virtuoso license prompt for self-hosted deployment */
-[style*="color: salmon"][style*="position: fixed"],
-[style*="color:salmon"][style*="position:fixed"] {
-  display: none !important;
-}
-
 @config '../../../tailwind.new.config.js';

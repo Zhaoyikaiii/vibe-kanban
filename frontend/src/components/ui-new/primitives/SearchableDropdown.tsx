@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -9,6 +9,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './Dropdown';
+
+export interface VirtualListHandle {
+  scrollToIndex: (index: number, behavior?: 'auto' | 'smooth') => void;
+}
 
 interface SearchableDropdownProps<T> {
   /** Array of filtered items to display */
@@ -42,8 +46,8 @@ interface SearchableDropdownProps<T> {
   /** Keyboard handler */
   onKeyDown: (e: React.KeyboardEvent) => void;
 
-  /** Virtuoso ref for scrolling */
-  virtuosoRef: RefObject<VirtuosoHandle | null>;
+  /** Virtual list ref for scrolling */
+  virtualListRef: RefObject<VirtualListHandle | null>;
 
   /** Class name for dropdown content */
   contentClassName?: string;
@@ -70,12 +74,36 @@ export function SearchableDropdown<T>({
   open,
   onOpenChange,
   onKeyDown,
-  virtuosoRef,
+  virtualListRef,
   contentClassName,
   placeholder = 'Search',
   emptyMessage = 'No items found',
   getItemBadge,
 }: SearchableDropdownProps<T>) {
+  const parentRef = { current: null as HTMLDivElement | null };
+
+  const virtualizer = useVirtualizer({
+    count: filteredItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 5,
+    getItemKey: (index) => getItemKey(filteredItems[index]) ?? String(index),
+  });
+
+  // Expose scrollToIndex method via ref
+  if (virtualListRef) {
+    (virtualListRef as React.MutableRefObject<VirtualListHandle | null>).current = {
+      scrollToIndex: (index: number, behavior: 'auto' | 'smooth' = 'auto') => {
+        virtualizer.scrollToIndex(index, {
+          align: 'center',
+          behavior,
+        });
+      },
+    };
+  }
+
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
@@ -92,34 +120,52 @@ export function SearchableDropdown<T>({
             {emptyMessage}
           </div>
         ) : (
-          <Virtuoso
-            ref={virtuosoRef as React.RefObject<VirtuosoHandle>}
-            style={{ height: '16rem' }}
-            totalCount={filteredItems.length}
-            computeItemKey={(idx) =>
-              getItemKey(filteredItems[idx]) ?? String(idx)
-            }
-            itemContent={(idx) => {
-              const item = filteredItems[idx];
-              const key = getItemKey(item);
-              const isHighlighted = idx === highlightedIndex;
-              const isSelected = selectedValue === key;
-              return (
-                <DropdownMenuItem
-                  onSelect={() => onSelect(item)}
-                  onMouseEnter={() => onHighlightedIndexChange(idx)}
-                  preventFocusOnHover
-                  badge={getItemBadge?.(item)}
-                  className={cn(
-                    isSelected && 'bg-secondary',
-                    isHighlighted && 'bg-secondary'
-                  )}
-                >
-                  {getItemLabel(item)}
-                </DropdownMenuItem>
-              );
-            }}
-          />
+          <div
+            ref={(el) => { parentRef.current = el; }}
+            style={{ height: '16rem', overflow: 'auto' }}
+          >
+            <div
+              style={{
+                height: virtualizer.getTotalSize(),
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {virtualItems.map((virtualItem) => {
+                const item = filteredItems[virtualItem.index];
+                const key = getItemKey(item);
+                const isHighlighted = virtualItem.index === highlightedIndex;
+                const isSelected = selectedValue === key;
+                return (
+                  <div
+                    key={virtualItem.key}
+                    data-index={virtualItem.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <DropdownMenuItem
+                      onSelect={() => onSelect(item)}
+                      onMouseEnter={() => onHighlightedIndexChange(virtualItem.index)}
+                      preventFocusOnHover
+                      badge={getItemBadge?.(item)}
+                      className={cn(
+                        isSelected && 'bg-secondary',
+                        isHighlighted && 'bg-secondary'
+                      )}
+                    >
+                      {getItemLabel(item)}
+                    </DropdownMenuItem>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

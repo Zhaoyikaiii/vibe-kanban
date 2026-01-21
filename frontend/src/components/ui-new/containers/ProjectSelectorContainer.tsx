@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VirtuosoHandle } from 'react-virtuoso';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { PlusIcon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import {
@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui-new/primitives/Dropdown';
-import { Virtuoso } from 'react-virtuoso';
 import type { Project } from 'shared/types';
 
 interface ProjectSelectorContainerProps {
@@ -33,7 +32,7 @@ export function ProjectSelectorContainer({
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   const filteredItems = useMemo(() => {
     if (!searchTerm.trim()) return projects;
@@ -47,6 +46,14 @@ export function ProjectSelectorContainer({
     if (highlightedIndex >= filteredItems.length + 1) return null;
     return highlightedIndex;
   }, [highlightedIndex, filteredItems.length]);
+
+  const virtualizer = useVirtualizer({
+    count: filteredItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 5,
+    getItemKey: (index) => filteredItems[index]?.id ?? String(index),
+  });
 
   const handleSearchTermChange = useCallback((value: string) => {
     setSearchTerm(value);
@@ -62,13 +69,13 @@ export function ProjectSelectorContainer({
       const next = (start + delta + totalItems) % totalItems;
       setHighlightedIndex(next);
       if (next > 0) {
-        virtuosoRef.current?.scrollIntoView({
-          index: next - 1,
+        virtualizer.scrollToIndex(next - 1, {
+          align: 'center',
           behavior: 'auto',
         });
       }
     },
-    [filteredItems, safeHighlightedIndex]
+    [filteredItems, safeHighlightedIndex, virtualizer]
   );
 
   const attemptSelect = useCallback(() => {
@@ -138,6 +145,8 @@ export function ProjectSelectorContainer({
     setDropdownOpen(false);
   }, [onCreateProject]);
 
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
     <div className="p-base w-full">
       <DropdownMenu open={dropdownOpen} onOpenChange={handleOpenChange}>
@@ -196,31 +205,51 @@ export function ProjectSelectorContainer({
               {t('projects.noProjectsFound')}
             </div>
           ) : (
-            <Virtuoso
-              ref={virtuosoRef}
-              style={{ height: '14rem' }}
-              totalCount={filteredItems.length}
-              computeItemKey={(idx) => filteredItems[idx]?.id ?? String(idx)}
-              itemContent={(idx) => {
-                const item = filteredItems[idx];
-                // Highlight index is offset by 1 (create button is at 0)
-                const isHighlighted = idx + 1 === safeHighlightedIndex;
-                const isSelected = selectedProjectId === item.id;
-                return (
-                  <DropdownMenuItem
-                    onSelect={() => handleSelect(item)}
-                    onMouseEnter={() => setHighlightedIndex(idx + 1)}
-                    preventFocusOnHover
-                    className={cn(
-                      isSelected && 'bg-secondary',
-                      isHighlighted && 'bg-secondary'
-                    )}
-                  >
-                    {item.name}
-                  </DropdownMenuItem>
-                );
-              }}
-            />
+            <div
+              ref={parentRef}
+              style={{ height: '14rem', overflow: 'auto' }}
+            >
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {virtualItems.map((virtualItem) => {
+                  const item = filteredItems[virtualItem.index];
+                  // Highlight index is offset by 1 (create button is at 0)
+                  const isHighlighted = virtualItem.index + 1 === safeHighlightedIndex;
+                  const isSelected = selectedProjectId === item.id;
+                  return (
+                    <div
+                      key={virtualItem.key}
+                      data-index={virtualItem.index}
+                      ref={virtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                    >
+                      <DropdownMenuItem
+                        onSelect={() => handleSelect(item)}
+                        onMouseEnter={() => setHighlightedIndex(virtualItem.index + 1)}
+                        preventFocusOnHover
+                        className={cn(
+                          isSelected && 'bg-secondary',
+                          isHighlighted && 'bg-secondary'
+                        )}
+                      >
+                        {item.name}
+                      </DropdownMenuItem>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
