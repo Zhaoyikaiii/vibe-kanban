@@ -208,6 +208,8 @@ impl ClaudeAgentClient {
 
 /// Check for uncommitted git changes across all repos in the workspace.
 /// Returns a Stop hook response using `decision` (approve/block) and `reason` fields.
+/// When uncommitted changes exist, we approve the stop but log a reminder.
+/// The user can then manually commit with their own message or use AI to generate one.
 async fn check_git_status(repo_context: &RepoContext) -> serde_json::Value {
     let repo_paths = repo_context.repo_paths();
 
@@ -237,17 +239,12 @@ async fn check_git_status(repo_context: &RepoContext) -> serde_json::Value {
         }
     }
 
+    // Always approve stop - don't force AI to commit automatically.
+    // If there are uncommitted changes, just log them for the user's reference.
     if all_status.is_empty() {
-        // No uncommitted changes in any repo
         serde_json::json!({"decision": "approve"})
     } else {
-        // Has uncommitted changes, block stop
-        serde_json::json!({
-            "decision": "block",
-            "reason": format!(
-                "There are uncommitted changes. Please stage and commit them now with a descriptive commit message.{}",
-                all_status
-            )
-        })
+        tracing::info!("Uncommitted changes detected at stop:{}", all_status);
+        serde_json::json!({"decision": "approve"})
     }
 }
