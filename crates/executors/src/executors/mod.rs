@@ -20,7 +20,7 @@ use crate::{
     command::CommandBuildError,
     env::ExecutionEnv,
     executors::{
-        amp::Amp, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
+        amp::Amp, claude::ClaudeCode, codebuddy::CodeBuddy, codex::Codex, copilot::Copilot, cursor::CursorAgent,
         droid::Droid, gemini::Gemini, opencode::Opencode, qwen::QwenCode,
     },
     mcp_config::McpConfig,
@@ -29,6 +29,7 @@ use crate::{
 pub mod acp;
 pub mod amp;
 pub mod claude;
+pub mod codebuddy;
 pub mod codex;
 pub mod copilot;
 pub mod cursor;
@@ -93,6 +94,7 @@ pub enum ExecutorError {
 )]
 pub enum CodingAgent {
     ClaudeCode,
+    CodeBuddy,
     Amp,
     Gemini,
     Codex,
@@ -144,6 +146,14 @@ impl CodingAgent {
                 self.preconfigured_mcp(),
                 false,
             ),
+            Self::CodeBuddy(_) => McpConfig::new(
+                vec!["mcpServers".to_string()],
+                serde_json::json!({
+                    "mcpServers": {}
+                }),
+                self.preconfigured_mcp(),
+                false,
+            ),
             _ => McpConfig::new(
                 vec!["mcpServers".to_string()],
                 serde_json::json!({
@@ -162,6 +172,7 @@ impl CodingAgent {
     pub fn capabilities(&self) -> Vec<BaseAgentCapability> {
         match self {
             Self::ClaudeCode(_)
+            | Self::CodeBuddy(_)
             | Self::Amp(_)
             | Self::Gemini(_)
             | Self::QwenCode(_)
