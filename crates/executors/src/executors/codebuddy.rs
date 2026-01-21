@@ -44,8 +44,6 @@ pub struct CodeBuddy {
     pub plan: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approvals: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dangerously_skip_permissions: Option<bool>,
     #[serde(flatten)]
     pub cmd: CmdOverrides,
 
@@ -64,15 +62,11 @@ impl CodeBuddy {
         if plan && approvals {
             tracing::warn!("Both plan and approvals are enabled. Plan will take precedence.");
         }
-        if plan || approvals {
-            builder = builder.extend_params([format!(
-                "--permission-mode={}",
-                PermissionMode::BypassPermissions
-            )]);
-        }
-        if self.dangerously_skip_permissions.unwrap_or(false) {
-            builder = builder.extend_params(["--dangerously-skip-permissions"]);
-        }
+        // Always use BypassPermissions mode - actual permission control is handled via hooks
+        builder = builder.extend_params([format!(
+            "--permission-mode={}",
+            PermissionMode::BypassPermissions
+        )]);
         builder = builder.extend_params([
             "--verbose",
             "--output-format=stream-json",
@@ -127,6 +121,17 @@ impl CodeBuddy {
                     {
                         "matcher": "^(?!(Glob|Grep|NotebookRead|Read|Task|TodoWrite)$).*",
                         "hookCallbackIds": ["tool_approval"],
+                    }
+                ]),
+            );
+        } else {
+            // Default mode: auto-approve all tools via hooks (replaces --dangerously-skip-permissions)
+            hooks.insert(
+                "PreToolUse".to_string(),
+                serde_json::json!([
+                    {
+                        "matcher": ".*",
+                        "hookCallbackIds": [AUTO_APPROVE_CALLBACK_ID],
                     }
                 ]),
             );
