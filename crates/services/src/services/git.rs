@@ -56,6 +56,18 @@ pub enum ConflictOp {
     Revert,
 }
 
+/// Strategy for merging task branch into base branch
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum MergeStrategy {
+    /// Squash all commits into a single commit (default behavior)
+    #[default]
+    Squash,
+    /// Fast-forward merge if possible, preserving original commits
+    FastForward,
+}
+
 #[derive(Debug, Serialize, TS)]
 pub struct GitBranch {
     pub name: String,
@@ -785,6 +797,9 @@ impl GitService {
     }
 
     /// Merge changes from a task branch into the base branch.
+    /// 
+    /// # Arguments
+    /// * `strategy` - The merge strategy to use (Squash or FastForward)
     pub fn merge_changes(
         &self,
         base_worktree_path: &Path,
@@ -792,6 +807,7 @@ impl GitService {
         task_branch_name: &str,
         base_branch_name: &str,
         commit_message: &str,
+        strategy: MergeStrategy,
     ) -> Result<String, GitServiceError> {
         // Open the repositories
         let task_repo = self.open_repo(task_worktree_path)?;
@@ -827,28 +843,47 @@ impl GitService {
                     ));
                 }
 
-                // Use CLI merge in base context
                 self.ensure_cli_commit_identity(&base_checkout_path)?;
-                let sha = git_cli
-                    .merge_squash_commit(
-                        &base_checkout_path,
-                        base_branch_name,
-                        task_branch_name,
-                        commit_message,
-                    )
-                    .map_err(|e| {
-                        GitServiceError::InvalidRepository(format!("CLI merge failed: {e}"))
-                    })?;
 
-                // Update task branch ref for continuity
-                let task_refname = format!("refs/heads/{task_branch_name}");
-                git_cli
-                    .update_ref(base_worktree_path, &task_refname, &sha)
-                    .map_err(|e| {
-                        GitServiceError::InvalidRepository(format!("git update-ref failed: {e}"))
-                    })?;
+                match strategy {
+                    MergeStrategy::Squash => {
+                        // Use CLI squash merge in base context
+                        let sha = git_cli
+                            .merge_squash_commit(
+                                &base_checkout_path,
+                                base_branch_name,
+                                task_branch_name,
+                                commit_message,
+                            )
+                            .map_err(|e| {
+                                GitServiceError::InvalidRepository(format!("CLI merge failed: {e}"))
+                            })?;
 
-                Ok(sha)
+                        // Update task branch ref for continuity
+                        let task_refname = format!("refs/heads/{task_branch_name}");
+                        git_cli
+                            .update_ref(base_worktree_path, &task_refname, &sha)
+                            .map_err(|e| {
+                                GitServiceError::InvalidRepository(format!("git update-ref failed: {e}"))
+                            })?;
+
+                        Ok(sha)
+                    }
+                    MergeStrategy::FastForward => {
+                        // Use fast-forward merge to preserve original commits
+                        let sha = git_cli
+                            .merge_fast_forward(
+                                &base_checkout_path,
+                                base_branch_name,
+                                task_branch_name,
+                            )
+                            .map_err(|e| {
+                                GitServiceError::InvalidRepository(format!("CLI fast-forward merge failed: {e}"))
+                            })?;
+
+                        Ok(sha)
+                    }
+                }
             }
             None => {
                 // base branch not checked out anywhere - use libgit2 pure ref operations
@@ -859,28 +894,46 @@ impl GitService {
                 let base_commit = base_branch.get().peel_to_commit()?;
                 let task_commit = task_branch.get().peel_to_commit()?;
 
-                // Create the squash commit in-memory (no checkout) and update the base branch ref
-                let signature = self.signature_with_fallback(&task_repo)?;
-                let squash_commit_id = self.perform_squash_merge(
-                    &task_repo,
-                    &base_commit,
-                    &task_commit,
-                    &signature,
-                    commit_message,
-                    base_branch_name,
-                )?;
+                match strategy {
+                    MergeStrategy::Squash => {
+                        // Create the squash commit in-memory (no checkout) and update the base branch ref
+                        let signature = self.signature_with_fallback(&task_repo)?;
+                        let squash_commit_id = self.perform_squash_merge(
+                            &task_repo,
+                            &base_commit,
+                            &task_commit,
+                            &signature,
+                            commit_message,
+                            base_branch_name,
+                        )?;
 
-                // Update the task branch to the new squash commit so follow-up
-                // work can continue from the merged state without conflicts.
-                let task_refname = format!("refs/heads/{task_branch_name}");
-                base_repo.reference(
-                    &task_refname,
-                    squash_commit_id,
-                    true,
-                    "Reset task branch after squash merge",
-                )?;
+                        // Update the task branch to the new squash commit so follow-up
+                        // work can continue from the merged state without conflicts.
+                        let task_refname = format!("refs/heads/{task_branch_name}");
+                        base_repo.reference(
+                            &task_refname,
+                            squash_commit_id,
+                            true,
+                            "Reset task branch after squash merge",
+                        )?;
 
-                Ok(squash_commit_id.to_string())
+                        Ok(squash_commit_id.to_string())
+                    }
+                    MergeStrategy::FastForward => {
+                        // Fast-forward: just update base branch ref to task commit
+                        let task_commit_id = task_commit.id();
+                        let base_refname = format!("refs/heads/{base_branch_name}");
+                        
+                        base_repo.reference(
+                            &base_refname,
+                            task_commit_id,
+                            true,
+                            &format!("Fast-forward merge from {task_branch_name}"),
+                        )?;
+
+                        Ok(task_commit_id.to_string())
+                    }
+                }
             }
         }
     }

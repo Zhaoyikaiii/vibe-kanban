@@ -35,12 +35,6 @@
         "null"
       ]
     },
-    "dangerously_skip_permissions": {
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
     "disable_api_key": {
       "type": [
         "boolean",

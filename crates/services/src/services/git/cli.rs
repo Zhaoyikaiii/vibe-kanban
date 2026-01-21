@@ -619,6 +619,24 @@ impl GitCli {
             .map(|_| ())
     }
 
+    /// Checkout base branch and perform a fast-forward merge from from_branch.
+    /// Returns the resulting HEAD sha (which should be the same as from_branch's HEAD).
+    pub fn merge_fast_forward(
+        &self,
+        repo_path: &Path,
+        base_branch: &str,
+        from_branch: &str,
+    ) -> Result<String, GitCliError> {
+        self.git(repo_path, ["checkout", base_branch]).map(|_| ())?;
+        self.git(repo_path, ["merge", "--ff-only", from_branch])
+            .map(|_| ())?;
+        let sha = self
+            .git(repo_path, ["rev-parse", "HEAD"])?
+            .trim()
+            .to_string();
+        Ok(sha)
+    }
+
     pub fn abort_merge(&self, worktree_path: &Path) -> Result<(), GitCliError> {
         if !self.is_merge_in_progress(worktree_path)? {
             return Ok(());

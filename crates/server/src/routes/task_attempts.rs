@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 use services::services::{
     container::ContainerService,
     file_search::SearchQuery,
-    git::{ConflictOp, GitCliError, GitServiceError},
+    git::{ConflictOp, GitCliError, GitServiceError, MergeStrategy},
     workspace_manager::WorkspaceManager,
 };
 use sqlx::Error as SqlxError;
@@ -405,6 +405,9 @@ async fn handle_workspaces_ws(
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct MergeTaskAttemptRequest {
     pub repo_id: Uuid,
+    /// Merge strategy to use. Defaults to Squash if not specified.
+    #[serde(default)]
+    pub strategy: MergeStrategy,
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -459,6 +462,7 @@ pub async fn merge_task_attempt(
         &workspace.branch,
         &workspace_repo.target_branch,
         &commit_message,
+        request.strategy,
     )?;
 
     Merge::create_direct(
